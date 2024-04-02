@@ -1,0 +1,13 @@
+{
+    // Set the default
+    "editor.formatOnSave": false,
+    // Enable per-language
+    "[csharp]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "csharpier.csharpier-vscode"
+    },
+    "files.exclude": {
+        "**/bin": true,
+        "**/obj": true
+    }
+}
