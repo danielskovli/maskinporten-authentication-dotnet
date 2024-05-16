@@ -8,13 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\MaskinportenAuthentication\MaskinportenAuthentication.csproj" />
+    <ProjectReference Include="../../src/MaskinportenAuthentication\MaskinportenAuthentication.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-   <Content Include="Secrets/*">
-        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-   </Content>
+  <Content Include="secrets/*">
+    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+  </Content>
 </ItemGroup> 
 
 </Project>
