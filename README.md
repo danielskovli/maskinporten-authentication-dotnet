@@ -1,2 +1,2 @@
 # maskinporten-authentication-dotnet
-`./ExampleRunner/Secrets` folder is temporary and has only test data, calm down.
+Watch this space. Clever words will appear.
