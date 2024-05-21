@@ -5,12 +5,22 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MaskinportenAuthentication.Delegates;
 
-public sealed class MaskinportenDelegatingHandler : DelegatingHandler
+/// <summary>
+/// A <see cref="DelegatingHandler"/> (middleware) that provides authorization for all http requests
+/// </summary>
+internal sealed class MaskinportenDelegatingHandler : DelegatingHandler
 {
     private readonly ILogger<MaskinportenDelegatingHandler>? _logger;
     private readonly IEnumerable<string> _scopes;
     private readonly MaskinportenClient _maskinportenClient;
 
+    /// <summary>
+    /// Creates a new instance of <see cref="MaskinportenDelegatingHandler"/>.
+    /// </summary>
+    /// <param name="scopes">The scopes to claim with Maskinporten</param>
+    /// <param name="settings">Optional <see cref="MaskinportenSettings"/> object used to configure the underlying <see cref="MaskinportenClient"/>.
+    /// Can be omitted if the client has previously been configured.</param>
+    /// <param name="loggerFactory">Optional logger factory interface.</param>
     public MaskinportenDelegatingHandler(
         IEnumerable<string> scopes,
         MaskinportenSettings? settings = default,
@@ -25,6 +35,7 @@ public sealed class MaskinportenDelegatingHandler : DelegatingHandler
         );
     }
 
+    /// <inheritdoc/>
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken

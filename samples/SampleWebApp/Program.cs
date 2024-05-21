@@ -13,7 +13,7 @@ using MaskinportenAuthentication.Services;
         https://testdata.api.skatteetaten.no/api/testnorge/v2/soek
 
     For your own testing and/or implementation, substitute values as required.
-    
+
     NOTE: The key `MaskinportenSettingsFilepath` in appsettings.Development.json defines where the
           maskinporten-settings.json file should be loaded from.
 */
@@ -23,7 +23,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Maskinporten configuration -- Option 1: named httpclient
+// Maskinporten configuration -- Option 1:
+//     Named httpclient
+// Refer to appsettings.json for `MaskinportenSettingsLoader` filepath config
 builder.Services.AddMaskinportenHttpClient(
     clientName: "maskinportenClient1",
     scopes: ["skatteetaten:testnorge/testdata.read"]
@@ -37,8 +39,9 @@ builder.Services.AddMaskinportenHttpClient(
     }
 );
 
-// Maskinporten configuration -- Option 2: dependency injection
-// Refer to appsettings.json for `MaskinportenSettingsLoader` config
+// Maskinporten configuration -- Option 2:
+//     Dependency injection
+// Refer to appsettings.json for `MaskinportenSettingsLoader` filepath config
 builder.Services.AddHostedService<MaskinportenSettingsLoader>();
 builder.Services.AddTransient<IMaskinportenClient, MaskinportenClient>();
 
@@ -47,6 +50,8 @@ app.UseSwagger();
 app.UseSwaggerUI();
 app.UseHttpsRedirection();
 
+// Usage example 1.1:
+//     Named http client, as configured above
 app.MapGet(
     "/named-clients",
     async (IHttpClientFactory clientFactory) =>
@@ -92,6 +97,8 @@ app.MapGet(
     }
 );
 
+// Usage example 2.1:
+//     Dependency injection with a configuration delegate
 app.MapGet(
     "/config-delegate",
     async (IMaskinportenClient client) =>
@@ -115,6 +122,8 @@ app.MapGet(
     }
 );
 
+// Usage example 2.2:
+//     Dependency injection with a factory method
 app.MapGet(
     "/factory-method",
     async (IMaskinportenClient client) =>
@@ -138,6 +147,8 @@ app.MapGet(
     }
 );
 
+// Usage example 2.3:
+//     Dependency injection with a completely manual http request assembly
 app.MapGet(
     "/manual-auth",
     async (IMaskinportenClient client) =>

@@ -10,11 +10,11 @@ using Microsoft.Extensions.Logging;
     Running the examples in this test requires a Maskinporten client with the following scopes:
         idporten:dcr.read
         skatteetaten:testnorge/testdata.read
-        
+
     This in order to access the protected API endpoints at:
         https://api.test.samarbeid.digdir.no/clients
         https://testdata.api.skatteetaten.no/api/testnorge/v2/soek
-        
+
     For your own testing and/or implementation, substitute values as required.
 */
 
@@ -35,7 +35,8 @@ var settings = await JsonLoader<MaskinportenSettings>.LoadFileAsync(
 );
 var client = new MaskinportenClient(settings: settings, logger: loggerFactory.CreateLogger<MaskinportenClient>());
 
-// Usage example 1: configuration delegate
+// Usage example 1:
+//     Configuration delegate
 var request = await client.AuthorizedRequestAsync(
     scopes: ["idporten:dcr.read"],
     request =>
@@ -49,7 +50,8 @@ result.EnsureSuccessStatusCode();
 var content = await result.Content.ReadAsStringAsync();
 logger.LogInformation("Configuration delegate result: {Result}", content);
 
-// Usage example 2: factory method
+// Usage example 2:
+//     Factory method
 request = await client.AuthorizedRequestAsync(
     scopes: ["skatteetaten:testnorge/testdata.read"],
     HttpMethod.Get,
@@ -61,7 +63,8 @@ result.EnsureSuccessStatusCode();
 content = await result.Content.ReadAsStringAsync();
 logger.LogInformation("Factory method result: {Result}", content);
 
-// Usage example 3: manual authorization
+// Usage example 3:
+//     Manual authorization
 var authTokenResponse = await client.Authorize(scopes: ["skatteetaten:testnorge/testdata.read"]);
 request = new HttpRequestMessage(
     HttpMethod.Get,
