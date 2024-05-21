@@ -102,9 +102,7 @@ app.MapGet(
             request =>
             {
                 request.Method = HttpMethod.Get;
-                request.RequestUri = new Uri(
-                    "https://api.test.samarbeid.digdir.no/clients/ds_altinn_maskinporten"
-                );
+                request.RequestUri = new Uri("https://api.test.samarbeid.digdir.no/clients/ds_altinn_maskinporten");
             }
         );
 
@@ -152,10 +150,7 @@ app.MapGet(
             HttpMethod.Get,
             "https://api.test.samarbeid.digdir.no/clients/ds_altinn_maskinporten"
         );
-        request.Headers.Authorization = new AuthenticationHeaderValue(
-            "Bearer",
-            authTokenResponse.AccessToken
-        );
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authTokenResponse.AccessToken);
 
         // Send request and retrieve response
         using var result = await client.HttpClient.SendAsync(request);

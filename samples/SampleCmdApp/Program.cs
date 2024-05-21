@@ -31,17 +31,9 @@ var logger = loggerFactory.CreateLogger<Program>();
 
 // Maskinporten client configuration
 var settings = await JsonLoader<MaskinportenSettings>.LoadFileAsync(
-    Path.Combine(
-        Environment.CurrentDirectory,
-        "../../../../",
-        "secrets",
-        "maskinporten-settings.json"
-    )
+    Path.Combine(Environment.CurrentDirectory, "../../../../", "secrets", "maskinporten-settings.json")
 );
-var client = new MaskinportenClient(
-    settings: settings,
-    logger: loggerFactory.CreateLogger<MaskinportenClient>()
-);
+var client = new MaskinportenClient(settings: settings, logger: loggerFactory.CreateLogger<MaskinportenClient>());
 
 // Usage example 1: configuration delegate
 var request = await client.AuthorizedRequestAsync(
@@ -49,9 +41,7 @@ var request = await client.AuthorizedRequestAsync(
     request =>
     {
         request.Method = HttpMethod.Get;
-        request.RequestUri = new Uri(
-            "https://api.test.samarbeid.digdir.no/clients/ds_altinn_maskinporten"
-        );
+        request.RequestUri = new Uri("https://api.test.samarbeid.digdir.no/clients/ds_altinn_maskinporten");
     }
 );
 var result = await client.HttpClient.SendAsync(request);
@@ -77,10 +67,7 @@ request = new HttpRequestMessage(
     HttpMethod.Get,
     "https://testdata.api.skatteetaten.no/api/testnorge/v2/soek/freg?kql=tenorRelasjoner.brreg-er-fr%3A%7BdagligLeder%3A*%7D&antall=3"
 );
-request.Headers.Authorization = new AuthenticationHeaderValue(
-    "Bearer",
-    authTokenResponse.AccessToken
-);
+request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authTokenResponse.AccessToken);
 
 result = await client.HttpClient.SendAsync(request);
 result.EnsureSuccessStatusCode();
