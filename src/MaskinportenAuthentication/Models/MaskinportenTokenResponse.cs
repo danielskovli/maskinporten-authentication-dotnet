@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace MaskinportenAuthentication.Models;
 
-public record MaskinportenTokenResponse : IEquatable<MaskinportenTokenResponse>
+public record MaskinportenTokenResponse
 {
     [JsonPropertyName("access_token")]
     public required string AccessToken { get; set; }
