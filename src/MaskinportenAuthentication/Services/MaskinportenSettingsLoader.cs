@@ -8,8 +8,9 @@ namespace MaskinportenAuthentication.Services;
 
 public class MaskinportenSettingsLoader : IHostedService, IAsyncDisposable
 {
-    private const string _appsettingsKeyName = "MaskinportenSettingsFilepath";
-    private const string _defaultSettingsFilepath = "/mnt/app-secrets/maskinporten-settings.json";
+    private static readonly string _appsettingsKeyName = "MaskinportenSettingsFilepath";
+    private static readonly string _defaultSettingsFilepath =
+        "/mnt/app-secrets/maskinporten-settings.json";
     private readonly string? _settingsFilepath;
     private readonly ILogger<MaskinportenSettingsLoader>? _logger;
     private Timer? _timer;
