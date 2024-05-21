@@ -39,7 +39,8 @@ public sealed class MaskinportenClient : IMaskinportenClient
     /// <summary>
     /// Configures the Maskinporten handshake for <b>ALL</b> instances of <see cref="MaskinportenClient"/>.
     /// </summary>
-    /// <param name="settings">The settings used for configuration, eg. clientId, secret key jwt, and the Maskinporten authority URI to target.</param>
+    /// <param name="settings">The settings used for configuration, eg. clientId, secret key jwt,
+    /// and the Maskinporten authority URI to target.</param>
     public static void Configure(MaskinportenSettings settings)
     {
         _authenticationSettings = settings;
@@ -159,7 +160,8 @@ public sealed class MaskinportenClient : IMaskinportenClient
     /// </summary>
     /// <param name="httpResponse">The server response.</param>
     /// <returns>A <see cref="MaskinportenTokenResponse"/> for successful requests.</returns>
-    /// <exception cref="MaskinportenAuthenticationException">Authentication failed. This could be caused by an authentication/authorization issue or a myriad of tother circumstances.</exception>
+    /// <exception cref="MaskinportenAuthenticationException">Authentication failed.
+    /// This could be caused by an authentication/authorization issue or a myriad of tother circumstances.</exception>
     private static async Task<MaskinportenTokenResponse> ParseServerResponse(HttpResponseMessage httpResponse)
     {
         var content = await httpResponse.Content.ReadAsStringAsync();

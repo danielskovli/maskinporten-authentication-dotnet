@@ -21,7 +21,8 @@ public interface IMaskinportenClient
     /// <param name="scopes">A list of scopes to claim authorization for for</param>
     /// <param name="cancellationToken">An optional cancellation token to be forwarded to internal http calls</param>
     /// <returns>A <see cref="MaskinportenTokenResponse"/> which contains an access token, amongst other things.</returns>
-    /// <exception cref="MaskinportenAuthentication.Exceptions.MaskinportenAuthenticationException">Authentication failed. This could be caused by an authentication/authorization issue or a myriad of other circumstances.</exception>
+    /// <exception cref="MaskinportenAuthentication.Exceptions.MaskinportenAuthenticationException">Authentication failed.
+    /// This could be caused by an authentication/authorization issue or a myriad of other circumstances.</exception>
     public Task<MaskinportenTokenResponse> Authorize(
         IEnumerable<string> scopes,
         CancellationToken cancellationToken = default
@@ -35,7 +36,8 @@ public interface IMaskinportenClient
     /// <param name="uri">URI to bind the request to.</param>
     /// <param name="cancellationToken">An optional cancellation token to be forwarded to internal http calls.</param>
     /// <returns>An authenticated <see cref="HttpRequestMessage"/>.</returns>
-    /// <exception cref="MaskinportenAuthentication.Exceptions.MaskinportenAuthenticationException">Authentication failed. This could be caused by an authentication/authorization issue or a myriad of other circumstances.</exception>
+    /// <exception cref="MaskinportenAuthentication.Exceptions.MaskinportenAuthenticationException">Authentication failed.
+    /// This could be caused by an authentication/authorization issue or a myriad of other circumstances.</exception>
     public Task<HttpRequestMessage> AuthorizedRequestAsync(
         IEnumerable<string> scopes,
         HttpMethod method,
@@ -50,7 +52,8 @@ public interface IMaskinportenClient
     /// <param name="configureRequest">An optional action delegate used to configure the http request (URI, method, content-type, etc).</param>
     /// <param name="cancellationToken">An optional cancellation token to be forwarded to internal http calls.</param>
     /// <returns>An authenticated <see cref="HttpRequestMessage"/>.</returns>
-    /// <exception cref="MaskinportenAuthentication.Exceptions.MaskinportenAuthenticationException">Authentication failed. This could be caused by an authentication/authorization issue or a myriad of other circumstances.</exception>
+    /// <exception cref="MaskinportenAuthentication.Exceptions.MaskinportenAuthenticationException">Authentication failed.
+    /// This could be caused by an authentication/authorization issue or a myriad of other circumstances.</exception>
     public Task<HttpRequestMessage> AuthorizedRequestAsync(
         IEnumerable<string> scopes,
         Action<HttpRequestMessage>? configureRequest = default,

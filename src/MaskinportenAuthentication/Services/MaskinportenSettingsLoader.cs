@@ -9,25 +9,18 @@ namespace MaskinportenAuthentication.Services;
 public class MaskinportenSettingsLoader : IHostedService, IAsyncDisposable
 {
     private static readonly string _appsettingsKeyName = "MaskinportenSettingsFilepath";
-    private static readonly string _defaultSettingsFilepath =
-        "/mnt/app-secrets/maskinporten-settings.json";
+    private static readonly string _defaultSettingsFilepath = "/mnt/app-secrets/maskinporten-settings.json";
     private readonly string? _settingsFilepath;
     private readonly ILogger<MaskinportenSettingsLoader>? _logger;
     private Timer? _timer;
 
-    public MaskinportenSettingsLoader(
-        IConfiguration config,
-        ILogger<MaskinportenSettingsLoader>? logger = default
-    )
+    public MaskinportenSettingsLoader(IConfiguration config, ILogger<MaskinportenSettingsLoader>? logger = default)
     {
         _settingsFilepath = config.GetValue<string>(_appsettingsKeyName);
         _logger = logger;
     }
 
-    public MaskinportenSettingsLoader(
-        string settingsFilepath,
-        ILogger<MaskinportenSettingsLoader>? logger = default
-    )
+    public MaskinportenSettingsLoader(string settingsFilepath, ILogger<MaskinportenSettingsLoader>? logger = default)
     {
         _settingsFilepath = settingsFilepath;
         _logger = logger;
@@ -58,10 +51,7 @@ public class MaskinportenSettingsLoader : IHostedService, IAsyncDisposable
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger?.LogInformation(
-            "Shutting down service {Service}",
-            nameof(MaskinportenSettingsLoader)
-        );
+        _logger?.LogInformation("Shutting down service {Service}", nameof(MaskinportenSettingsLoader));
         _timer?.Change(Timeout.Infinite, 0);
         return Task.CompletedTask;
     }
