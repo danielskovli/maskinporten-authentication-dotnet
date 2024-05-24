@@ -1,9 +1,11 @@
 ﻿using System.Collections.Concurrent;
-using System.Net.Http.Headers;
 using System.Text.Json;
 using MaskinportenAuthentication.Exceptions;
 using MaskinportenAuthentication.Models;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -12,100 +14,83 @@ namespace MaskinportenAuthentication;
 /// <inheritdoc/>
 public sealed class MaskinportenClient : IMaskinportenClient
 {
-    private static readonly int _tokenExpirationMargin = 20;
-    private static MaskinportenSettings? _authenticationSettings;
     private readonly ILogger<MaskinportenClient>? _logger;
+    private readonly IOptionsMonitor<MaskinportenSettings> _options;
+    private readonly IMemoryCache _tokenCache;
 
-    private static string TokenUri => _authenticationSettings?.Authority.Trim('/') + "/token";
+    private string TokenUri => _options.CurrentValue.Authority.Trim('/') + "/token";
 
-    public HttpClient HttpClient => _httpClient;
-    private static readonly HttpClient _httpClient = new();
-    private static readonly ConcurrentDictionary<string, MaskinportenTokenResponse> _tokenCache = new();
+    private static readonly HttpClient _httpClient =
+        new(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(15) });
+
+    // private static readonly ConcurrentDictionary<string, MaskinportenTokenResponse> _tokenCache = new();
 
     /// <summary>
     /// Instantiates a new <see cref="MaskinportenClient"/> object.
     /// </summary>
-    /// <param name="settings">Optional <see cref="MaskinportenSettings"/> configuration.
-    /// May also be provided at any time via <see cref="Configure"/>.
-    /// Note: This configuration is a singleton -- only one set of instructions can exist across all instances at any given time.
-    /// </param>
+    /// <param name="options"></param>
+    /// <param name="tokenCache"></param>
     /// <param name="logger">Optional logger interface.</param>
-    public MaskinportenClient(MaskinportenSettings? settings = default, ILogger<MaskinportenClient>? logger = default)
+    public MaskinportenClient(
+        IOptionsMonitor<MaskinportenSettings> options,
+        IMemoryCache tokenCache,
+        ILogger<MaskinportenClient>? logger = default
+    )
     {
-        _authenticationSettings = settings ?? _authenticationSettings;
+        _options = options;
+        _tokenCache = tokenCache;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Configures the Maskinporten handshake for <b>ALL</b> instances of <see cref="MaskinportenClient"/>.
-    /// </summary>
-    /// <param name="settings">The settings used for configuration, eg. clientId, secret key jwt,
-    /// and the Maskinporten authority URI to target.</param>
-    public static void Configure(MaskinportenSettings settings)
-    {
-        _authenticationSettings = settings;
-    }
-
     /// <inheritdoc/>
-    public async Task<MaskinportenTokenResponse> Authorize(
+    public async Task<MaskinportenTokenResponse> GetAccessToken(
         IEnumerable<string> scopes,
         CancellationToken cancellationToken = default
     )
     {
         var formattedScopes = FormattedScopes(scopes);
-        var expiryWindow = DateTime.UtcNow.AddSeconds(_tokenExpirationMargin);
 
         if (
             _tokenCache.TryGetValue(formattedScopes, out MaskinportenTokenResponse? cachedToken)
-            && cachedToken.ExpiresAt >= expiryWindow
+            && cachedToken is not null
         )
         {
-            _logger?.LogDebug("Using cached access token which expires at: {expiry}", cachedToken.ExpiresAt);
+            _logger?.LogDebug("Using cached access token which expires at: {ExpiresAt}", cachedToken.ExpiresAt);
             return cachedToken;
         }
 
         _logger?.LogDebug("Cached token is not available or has expired, re-authenticating");
         var jwt = GenerateJwtGrant(formattedScopes);
         var payload = GenerateAuthenticationPayload(jwt);
-        using var response = await HttpClient.PostAsync(TokenUri, payload, cancellationToken).ConfigureAwait(false);
+        using var response = await _httpClient.PostAsync(TokenUri, payload, cancellationToken).ConfigureAwait(false);
 
         var token = await ParseServerResponse(response);
         _logger?.LogDebug("Token retrieved successfully");
-        return _tokenCache.AddOrUpdate(formattedScopes, token, (key, old) => token);
-    }
 
-    /// <inheritdoc/>
-    public Task<HttpRequestMessage> AuthorizedRequestAsync(
-        IEnumerable<string> scopes,
-        HttpMethod method,
-        string uri,
-        CancellationToken cancellationToken = default
-    )
-    {
-        return AuthorizedRequestAsync(
-            scopes,
-            request =>
-            {
-                request.Method = method;
-                request.RequestUri = new Uri(uri);
-            },
-            cancellationToken
+        return _tokenCache.Set(
+            formattedScopes,
+            token,
+            new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(token.ExpiresAt)
+                .AddExpirationToken(
+                    new CancellationChangeToken(
+                        new CancellationTokenSource(token.ExpiresAt.AddMilliseconds(100) - DateTime.UtcNow).Token
+                    )
+                )
+        // .RegisterPostEvictionCallback(
+        //     (key, value, reason, state) =>
+        //     {
+        //         _logger?.LogDebug(
+        //             "Eviction event from MemoryCache: Key={Key}, Value={Value}, Reason={Reason}, State={State}, TokenExpiryDiff={TokenExpiryDiff}",
+        //             key,
+        //             value,
+        //             reason,
+        //             state,
+        //             DateTime.UtcNow - ((MaskinportenTokenResponse?)value)?.ExpiresAt
+        //         );
+        //     }
+        // )
         );
-    }
-
-    /// <inheritdoc/>
-    public async Task<HttpRequestMessage> AuthorizedRequestAsync(
-        IEnumerable<string> scopes,
-        Action<HttpRequestMessage>? configureRequest = default,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var request = new HttpRequestMessage();
-        configureRequest?.Invoke(request);
-        var authToken = await Authorize(scopes, cancellationToken);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authToken.AccessToken);
-
-        return request;
     }
 
     /// <summary>
@@ -113,13 +98,19 @@ public sealed class MaskinportenClient : IMaskinportenClient
     /// </summary>
     /// <param name="formattedScopes">A space-separated list of scopes to make a claim for.</param>
     /// <returns><inheritdoc cref="JsonWebTokenHandler.CreateToken(SecurityTokenDescriptor)"/></returns>
-    /// <exception cref="MaskinportenConfigurationException">Missing Maskinporten configuration, see <see cref="Configure"/>.</exception>
-    private static string GenerateJwtGrant(string formattedScopes)
+    /// <exception cref="MaskinportenConfigurationException">Missing or invalid Maskinporten configuration.</exception>
+    private string GenerateJwtGrant(string formattedScopes)
     {
-        if (_authenticationSettings is null)
+        MaskinportenSettings? settings;
+        try
+        {
+            settings = _options.CurrentValue;
+        }
+        catch (OptionsValidationException e)
         {
             throw new MaskinportenConfigurationException(
-                $"Missing Maskinporten configuration {nameof(_authenticationSettings)}"
+                $"Error reading MaskinportenSettings from the current app configuration",
+                e
             );
         }
 
@@ -127,11 +118,11 @@ public sealed class MaskinportenClient : IMaskinportenClient
         var expiry = now.AddMinutes(2);
         var jwtDescriptor = new SecurityTokenDescriptor
         {
-            Issuer = _authenticationSettings.ClientId,
-            Audience = _authenticationSettings.Authority,
+            Issuer = settings.ClientId,
+            Audience = settings.Authority,
             IssuedAt = now,
             Expires = expiry,
-            SigningCredentials = new SigningCredentials(_authenticationSettings.Key, SecurityAlgorithms.RsaSha256),
+            SigningCredentials = new SigningCredentials(settings.Key, SecurityAlgorithms.RsaSha256),
             Claims = new Dictionary<string, object> { ["scope"] = formattedScopes, ["jti"] = Guid.NewGuid().ToString() }
         };
 

@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using MaskinportenAuthentication;
 using MaskinportenAuthentication.Extensions;
-using MaskinportenAuthentication.Services;
+using SampleWebApp.HttpClients;
 
 /*
     Running the examples in this test requires a Maskinporten client with the following scopes:
@@ -23,152 +23,65 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Maskinporten configuration -- Option 1:
-//     Named httpclient
-// Refer to appsettings.json for `MaskinportenSettingsLoader` filepath config
-builder.Services.AddMaskinportenHttpClient(
-    clientName: "maskinportenClient1",
-    scopes: ["skatteetaten:testnorge/testdata.read"]
-);
-builder.Services.AddMaskinportenHttpClient(
-    clientName: "maskinportenClient2",
-    scopes: ["idporten:dcr.read"],
-    client =>
-    {
-        client.BaseAddress = new Uri("https://api.test.samarbeid.digdir.no");
-    }
-);
+// Required: Add a Maskinporten client to the dependency injection service
+builder.AddMaskinportenClient();
 
-// Maskinporten configuration -- Option 2:
-//     Dependency injection
-// Refer to appsettings.json for `MaskinportenSettingsLoader` filepath config
-builder.Services.AddHostedService<MaskinportenSettingsLoader>();
-builder.Services.AddTransient<IMaskinportenClient, MaskinportenClient>();
+// Optional: Set up global http clients
+builder.Services.AddHttpClient("namedClient1").UseMaskinportenAuthorization(["skatteetaten:testnorge/testdata.read"]);
+builder.Services.AddHttpClient<ITypedClient1, TypedClient1>().UseMaskinportenAuthorization(TypedClient1.RequiredScopes);
+builder.Services.AddHttpClient<ITypedClient2, TypedClient2>().UseMaskinportenAuthorization(TypedClient2.RequiredScopes);
 
 var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseHttpsRedirection();
 
-// Usage example 1.1:
+// Usage example 1:
 //     Named http client, as configured above
 app.MapGet(
-    "/named-clients",
+    "/named-client",
     async (IHttpClientFactory clientFactory) =>
     {
-        // Retrieve the already configured http client named "maskinportenClient1"
-        // This client has already been configured with a set of scopes in the section above,
-        // and has a DelegatingHandler attached which will handle Authorization headers for all get/post/put/etc calls
-        using var client1 = clientFactory.CreateClient("maskinportenClient1");
-        using var result1 = await client1.GetAsync(
+        using var httpClient = clientFactory.CreateClient("namedClient1");
+        using var result = await httpClient.GetAsync(
             "https://testdata.api.skatteetaten.no/api/testnorge/v2/soek/freg?kql=tenorRelasjoner.brreg-er-fr%3A%7BdagligLeder%3A*%7D&antall=3"
         );
-        result1.EnsureSuccessStatusCode();
-        var content1 = await result1.Content.ReadAsStringAsync();
-
-        // Same as above, but retrieve "maskinportenClient2". This is a client with different scope claims.
-        using var client2 = clientFactory.CreateClient("maskinportenClient2");
-        using var result2 = await client2.GetAsync("/clients/ds_altinn_maskinporten");
-        result2.EnsureSuccessStatusCode();
-        var content2 = await result1.Content.ReadAsStringAsync();
-
-        // This is just to demonstrate that each client is uniquely configured
-        string? content3;
-        try
-        {
-            using var theWrongClient = clientFactory.CreateClient("maskinportenClient2");
-            using var errorResult = await theWrongClient.GetAsync(
-                "https://testdata.api.skatteetaten.no/api/testnorge/v2/soek/freg?kql=tenorRelasjoner.brreg-er-fr%3A%7BdagligLeder%3A*%7D&antall=3"
-            );
-            errorResult.EnsureSuccessStatusCode();
-            content3 = await errorResult.Content.ReadAsStringAsync();
-        }
-        catch (Exception e)
-        {
-            content3 = e.ToString();
-        }
-
-        return new
-        {
-            Result1 = content1,
-            Result2 = content2,
-            Result3 = content3
-        };
-    }
-);
-
-// Usage example 2.1:
-//     Dependency injection with a configuration delegate
-app.MapGet(
-    "/config-delegate",
-    async (IMaskinportenClient client) =>
-    {
-        // Generate a pre-authorized request
-        using var request = await client.AuthorizedRequestAsync(
-            scopes: ["idporten:dcr.read"],
-            request =>
-            {
-                request.Method = HttpMethod.Get;
-                request.RequestUri = new Uri("https://api.test.samarbeid.digdir.no/clients/ds_altinn_maskinporten");
-            }
-        );
-
-        // Send request and retrieve response
-        using var result = await client.HttpClient.SendAsync(request);
         result.EnsureSuccessStatusCode();
         var content = await result.Content.ReadAsStringAsync();
 
-        return new { Result = content };
+        return new { Data = content };
     }
 );
 
-// Usage example 2.2:
-//     Dependency injection with a factory method
+// Usage example 2:
+//     Typed client, as configured above
 app.MapGet(
-    "/factory-method",
-    async (IMaskinportenClient client) =>
+    "/typed-client",
+    async (ITypedClient1 typedClient1, ITypedClient2 typedClient2) =>
     {
-        // Generate a pre-authorized request
-        using var request = await client.AuthorizedRequestAsync(
-            scopes: ["idporten:dcr.read"],
-            HttpMethod.Get,
-            "https://api.test.samarbeid.digdir.no/clients/ds_altinn_maskinporten"
-        );
-
-        // Not required, just an example of further configuration
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-        // Send request and retrieve response
-        using var result = await client.HttpClient.SendAsync(request);
-        result.EnsureSuccessStatusCode();
-        var content = await result.Content.ReadAsStringAsync();
-
-        return new { Result = content };
+        var content1 = await typedClient1.GetApiData();
+        var content2 = await typedClient2.GetApiData();
+        return new { Data1 = content1, Data2 = content2 };
     }
 );
 
-// Usage example 2.3:
-//     Dependency injection with a completely manual http request assembly
+// Usage example 3:
+//     Manual authorization
 app.MapGet(
     "/manual-auth",
-    async (IMaskinportenClient client) =>
+    async (IMaskinportenClient maskinportenClient, IHttpClientFactory httpClientFactory) =>
     {
-        // Fetch an authorization token from Maskinporten
-        var authTokenResponse = await client.Authorize(scopes: ["idporten:dcr.read"]);
+        using var httpclient = httpClientFactory.CreateClient();
+        var token = await maskinportenClient.GetAccessToken(["idporten:dcr.read"]);
+        httpclient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
 
-        // Create a http request and configure the Authorization header
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
+        using var result = await httpclient.GetAsync(
             "https://api.test.samarbeid.digdir.no/clients/ds_altinn_maskinporten"
         );
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authTokenResponse.AccessToken);
-
-        // Send request and retrieve response
-        using var result = await client.HttpClient.SendAsync(request);
         result.EnsureSuccessStatusCode();
         var content = await result.Content.ReadAsStringAsync();
 
-        return new { Result = content };
+        return new { Data = content };
     }
 );
 
