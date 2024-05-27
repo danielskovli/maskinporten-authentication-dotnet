@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using MaskinportenAuthentication;
 using MaskinportenAuthentication.Extensions;
@@ -72,8 +73,25 @@ app.MapGet(
     async (IMaskinportenClient maskinportenClient, IHttpClientFactory httpClientFactory) =>
     {
         using var httpclient = httpClientFactory.CreateClient();
-        var token = await maskinportenClient.GetAccessToken(["idporten:dcr.read"]);
-        httpclient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
+
+        var multipleIdenticalTokenRequests = await Task.WhenAll(
+            maskinportenClient.GetAccessToken(["idporten:dcr.read"]),
+            maskinportenClient.GetAccessToken(["idporten:dcr.read"]),
+            maskinportenClient.GetAccessToken(["idporten:dcr.read"]),
+            Task.Run(async () =>
+            {
+                await Task.Delay(5000);
+                return await maskinportenClient.GetAccessToken(["idporten:dcr.read"]);
+            })
+        );
+
+        var randomToken = multipleIdenticalTokenRequests[new Random().Next(multipleIdenticalTokenRequests.Length)];
+        Debug.Assert(multipleIdenticalTokenRequests.All(x => ReferenceEquals(x, randomToken)));
+
+        httpclient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            randomToken.AccessToken
+        );
 
         using var result = await httpclient.GetAsync(
             "https://api.test.samarbeid.digdir.no/clients/ds_altinn_maskinporten"

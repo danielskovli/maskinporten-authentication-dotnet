@@ -44,7 +44,10 @@ public static class MaskinportenClientIntegration
             .Services.AddOptions<MaskinportenSettings>()
             .BindConfiguration("MaskinportenSettings")
             .ValidateDataAnnotations();
-        builder.Services.AddMemoryCache();
+        builder.Services.AddMemoryCache(options =>
+        {
+            options.SizeLimit = 256;
+        });
         builder.Services.AddSingleton<IMaskinportenClient, MaskinportenClient>();
 
         return builder;

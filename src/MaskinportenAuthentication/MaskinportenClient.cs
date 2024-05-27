@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using MaskinportenAuthentication.Exceptions;
 using MaskinportenAuthentication.Models;
@@ -43,54 +44,122 @@ public sealed class MaskinportenClient : IMaskinportenClient
     }
 
     /// <inheritdoc/>
-    public async Task<MaskinportenTokenResponse> GetAccessToken(
+    public Task<MaskinportenTokenResponse> GetAccessToken(
         IEnumerable<string> scopes,
         CancellationToken cancellationToken = default
     )
     {
         var formattedScopes = FormattedScopes(scopes);
-
-        if (
-            _tokenCache.TryGetValue(formattedScopes, out MaskinportenTokenResponse? cachedToken)
-            && cachedToken is not null
-        )
-        {
-            _logger?.LogDebug("Using cached access token which expires at: {ExpiresAt}", cachedToken.ExpiresAt);
-            return cachedToken;
-        }
-
-        _logger?.LogDebug("Cached token is not available or has expired, re-authenticating");
-        var jwt = GenerateJwtGrant(formattedScopes);
-        var payload = GenerateAuthenticationPayload(jwt);
-        using var response = await _httpClient.PostAsync(TokenUri, payload, cancellationToken).ConfigureAwait(false);
-
-        var token = await ParseServerResponse(response);
-        _logger?.LogDebug("Token retrieved successfully");
-
-        return _tokenCache.Set(
+        var cachedToken = _tokenCache.GetOrCreate(
             formattedScopes,
-            token,
-            new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(token.ExpiresAt)
-                .AddExpirationToken(
-                    new CancellationChangeToken(
-                        new CancellationTokenSource(token.ExpiresAt.AddMilliseconds(100) - DateTime.UtcNow).Token
-                    )
-                )
-        // .RegisterPostEvictionCallback(
-        //     (key, value, reason, state) =>
-        //     {
-        //         _logger?.LogDebug(
-        //             "Eviction event from MemoryCache: Key={Key}, Value={Value}, Reason={Reason}, State={State}, TokenExpiryDiff={TokenExpiryDiff}",
-        //             key,
-        //             value,
-        //             reason,
-        //             state,
-        //             DateTime.UtcNow - ((MaskinportenTokenResponse?)value)?.ExpiresAt
-        //         );
-        //     }
-        // )
+            entry =>
+            {
+                entry.SetSize(1);
+                return new Lazy<Task<MaskinportenTokenResponse>>(
+                    () =>
+                        Task.Run(
+                            async () =>
+                            {
+                                await Task.Yield();
+                                _logger?.LogDebug("Cached token is not available or has expired, re-authenticating");
+                                var jwt = GenerateJwtGrant(formattedScopes);
+                                var payload = GenerateAuthenticationPayload(jwt);
+                                using var response = await _httpClient
+                                    .PostAsync(TokenUri, payload, cancellationToken)
+                                    .ConfigureAwait(false);
+
+                                var token = await ParseServerResponse(response);
+                                _logger?.LogDebug("Token retrieved successfully");
+
+                                // TODO: This can be simplified/mostly skipped. Keeping for debug while WIP
+                                _tokenCache.Set(
+                                    formattedScopes,
+                                    token,
+                                    new MemoryCacheEntryOptions
+                                    {
+                                        Size = 1,
+                                        AbsoluteExpiration = token.ExpiresAt,
+                                        ExpirationTokens =
+                                        {
+                                            new CancellationChangeToken(
+                                                new CancellationTokenSource(
+                                                    token.ExpiresAt.AddMilliseconds(100) - DateTime.UtcNow
+                                                ).Token
+                                            )
+                                        },
+                                        PostEvictionCallbacks =
+                                        {
+                                            new PostEvictionCallbackRegistration
+                                            {
+                                                EvictionCallback = (key, value, reason, state) =>
+                                                {
+                                                    _logger?.LogDebug(
+                                                        "Eviction event from MemoryCache: Key={Key}, Value={Value}, Reason={Reason}, State={State}, TokenExpiryDiff={TokenExpiryDiff}",
+                                                        key,
+                                                        value,
+                                                        reason,
+                                                        state,
+                                                        DateTime.UtcNow - ((MaskinportenTokenResponse?)value)?.ExpiresAt
+                                                    );
+                                                },
+                                                State = null
+                                            }
+                                        }
+                                    }
+                                );
+                                return token;
+                            },
+                            cancellationToken
+                        ),
+                    LazyThreadSafetyMode.ExecutionAndPublication
+                );
+            }
         );
+
+        return cachedToken is not null ? cachedToken.Value : throw new MaskinportenAuthenticationException();
+
+        // OLD IMPLEMENTATION BELOW:
+        // if (
+        //     _tokenCache.TryGetValue(formattedScopes, out MaskinportenTokenResponse? cachedToken)
+        //     && cachedToken is not null
+        // )
+        // {
+        //     _logger?.LogDebug("Using cached access token which expires at: {ExpiresAt}", cachedToken.ExpiresAt);
+        //     return cachedToken;
+        // }
+        //
+        // _logger?.LogDebug("Cached token is not available or has expired, re-authenticating");
+        // var jwt = GenerateJwtGrant(formattedScopes);
+        // var payload = GenerateAuthenticationPayload(jwt);
+        // using var response = await _httpClient.PostAsync(TokenUri, payload, cancellationToken).ConfigureAwait(false);
+        //
+        // var token = await ParseServerResponse(response);
+        // _logger?.LogDebug("Token retrieved successfully");
+        //
+        // return _tokenCache.Set(
+        //     formattedScopes,
+        //     token,
+        //     new MemoryCacheEntryOptions()
+        //         .SetAbsoluteExpiration(token.ExpiresAt)
+        //         .AddExpirationToken(
+        //             new CancellationChangeToken(
+        //                 new CancellationTokenSource(token.ExpiresAt.AddMilliseconds(100) - DateTime.UtcNow).Token
+        //             )
+        //         )
+        //         .RegisterPostEvictionCallback(
+        //             (key, value, reason, state) =>
+        //             {
+        //                 _logger?.LogDebug(
+        //                     "Eviction event from MemoryCache: Key={Key}, Value={Value}, Reason={Reason}, State={State}, TokenExpiryDiff={TokenExpiryDiff}",
+        //                     key,
+        //                     value,
+        //                     reason,
+        //                     state,
+        //                     DateTime.UtcNow - ((MaskinportenTokenResponse?)value)?.ExpiresAt
+        //                 );
+        //             }
+        //         )
+        // );
     }
 
     /// <summary>
