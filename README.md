@@ -29,7 +29,7 @@ using MaskinportenAuthentication.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddMaskinportenClient();
-builder.Services.AddHttpClient<IFancyClient, FancyClient>().UseMaskinportenAuthorization(["the:scope"]);
+builder.Services.AddHttpClient<IFancyClient, FancyClient>().UseMaskinportenAuthorization("the:scope");
 
 var app = builder.Build();
 

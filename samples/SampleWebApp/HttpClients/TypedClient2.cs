@@ -4,7 +4,7 @@ namespace SampleWebApp.HttpClients;
 
 public class TypedClient2 : ITypedClient2
 {
-    public static IEnumerable<string> RequiredScopes => ["idporten:dcr.read"];
+    public static string[] RequiredScopes => ["idporten:dcr.read"];
     private readonly HttpClient _client;
 
     public TypedClient2(HttpClient client)

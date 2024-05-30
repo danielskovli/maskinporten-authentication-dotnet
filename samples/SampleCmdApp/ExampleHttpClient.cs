@@ -4,7 +4,7 @@ namespace SampleCmdApp;
 
 public class ExampleHttpClient
 {
-    public static IEnumerable<string> RequiredScopes => ["skatteetaten:testnorge/testdata.read"];
+    public static string[] RequiredScopes => ["skatteetaten:testnorge/testdata.read"];
     private readonly HttpClient _client;
     private readonly ILogger<ExampleHttpClient> _logger;
 

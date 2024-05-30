@@ -101,10 +101,10 @@ public static class MaskinportenClientIntegration
     /// If your target API does <em>not</em> use this authentication scheme, you should consider implementing
     /// <see cref="MaskinportenClient.GetAccessToken"/> directly and handling authorization details manually.
     /// </summary>
-    /// <param name="scopes">A list of scopes to claim authorization for with Maskinporten</param>
+    /// <param name="scopes">One or more scopes to claim authorization for with Maskinporten</param>
     public static IHttpClientBuilder UseMaskinportenAuthorization(
         this IHttpClientBuilder builder,
-        IEnumerable<string> scopes
+        params string[] scopes
     )
     {
         return builder.AddHttpMessageHandler(provider => new MaskinportenDelegatingHandler(scopes, provider));
