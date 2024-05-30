@@ -1,78 +1,50 @@
-﻿using System.Buffers.Text;
-using System.Net.Http.Headers;
-using System.Security.Cryptography;
-using MaskinportenAuthentication;
+﻿using MaskinportenAuthentication.Extensions;
 using MaskinportenAuthentication.Models;
-using MaskinportenAuthentication.Utils;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using SampleCmdApp;
 
 /*
-    Running the examples in this test requires a Maskinporten client with the following scopes:
-        idporten:dcr.read
+    Running the example in this test requires a Maskinporten client with the following scope:
         skatteetaten:testnorge/testdata.read
 
-    This in order to access the protected API endpoints at:
-        https://api.test.samarbeid.digdir.no/clients
+    This in order to access the protected API endpoint at:
         https://testdata.api.skatteetaten.no/api/testnorge/v2/soek
 
-    For your own testing and/or implementation, substitute values as required.
+    For your own testing and/or implementation, substitute the values as required.
+
+    NOTE: The maskinporten-settings.json file is optimized for a `WebApplication` consumer,
+          which means the `MaskinportenSettings` data is wrapped under a JSON property called "MaskinportenSettings".
+          For this reason the deserializing is slightly more tedious than normal.
 */
 
+// Instantiate a host application to handle DI and other goodies
+HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
-using var loggerFactory = LoggerFactory.Create(static builder =>
+// Configre logging
+builder
+    .Logging.AddFilter("Microsoft", LogLevel.Warning)
+    .AddFilter("System", LogLevel.Warning)
+    .AddFilter("MaskinportenAuthentication", LogLevel.Debug)
+    .AddFilter("SampleCmdApp", LogLevel.Debug)
+    .AddConsole();
+
+// Load Maskinporten settings and configure clients
+var maskinportenSettings = SettingsLoader<MaskinportenSettings>.Load(
+    Path.GetFullPath("../secrets/maskinporten-settings.json"),
+    "MaskinportenSettings"
+);
+builder.Services.AddMaskinportenClient(config =>
 {
-    builder
-        .AddFilter("Microsoft", LogLevel.Warning)
-        .AddFilter("System", LogLevel.Warning)
-        .AddFilter("MaskinportenAuthentication", LogLevel.Debug)
-        .AddConsole();
+    config.Key = maskinportenSettings.Key;
+    config.Authority = maskinportenSettings.Authority;
+    config.ClientId = maskinportenSettings.ClientId;
 });
-var logger = loggerFactory.CreateLogger<Program>();
+builder.Services.AddHttpClient<ExampleHttpClient>().UseMaskinportenAuthorization(ExampleHttpClient.RequiredScopes);
+builder.Services.AddSingleton<ExampleRunner>();
 
-// Maskinporten client configuration
-var settings = await JsonLoader<MaskinportenSettings>.LoadFileAsync(
-    Path.Combine(Environment.CurrentDirectory, "../../../../", "secrets", "maskinporten-settings.json")
-);
-var client = new MaskinportenClient(settings: settings, logger: loggerFactory.CreateLogger<MaskinportenClient>());
-
-// Usage example 1:
-//     Configuration delegate
-var request = await client.AuthorizedRequestAsync(
-    scopes: ["idporten:dcr.read"],
-    request =>
-    {
-        request.Method = HttpMethod.Get;
-        request.RequestUri = new Uri("https://api.test.samarbeid.digdir.no/clients/ds_altinn_maskinporten");
-    }
-);
-var result = await client.HttpClient.SendAsync(request);
-result.EnsureSuccessStatusCode();
-var content = await result.Content.ReadAsStringAsync();
-logger.LogInformation("Configuration delegate result: {Result}", content);
-
-// Usage example 2:
-//     Factory method
-request = await client.AuthorizedRequestAsync(
-    scopes: ["skatteetaten:testnorge/testdata.read"],
-    HttpMethod.Get,
-    "https://testdata.api.skatteetaten.no/api/testnorge/v2/soek/freg?kql=tenorRelasjoner.brreg-er-fr%3A%7BdagligLeder%3A*%7D&antall=3"
-);
-
-result = await client.HttpClient.SendAsync(request);
-result.EnsureSuccessStatusCode();
-content = await result.Content.ReadAsStringAsync();
-logger.LogInformation("Factory method result: {Result}", content);
-
-// Usage example 3:
-//     Manual authorization
-var authTokenResponse = await client.Authorize(scopes: ["skatteetaten:testnorge/testdata.read"]);
-request = new HttpRequestMessage(
-    HttpMethod.Get,
-    "https://testdata.api.skatteetaten.no/api/testnorge/v2/soek/freg?kql=tenorRelasjoner.brreg-er-fr%3A%7BdagligLeder%3A*%7D&antall=3"
-);
-request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authTokenResponse.AccessToken);
-
-result = await client.HttpClient.SendAsync(request);
-result.EnsureSuccessStatusCode();
-content = await result.Content.ReadAsStringAsync();
-logger.LogInformation("Manual auth result: {Result}", content);
+// Build host and execute runner
+using IHost host = builder.Build();
+var runner = host.Services.GetRequiredService<ExampleRunner>();
+await runner.Run();

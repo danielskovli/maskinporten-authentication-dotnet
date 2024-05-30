@@ -1,13 +1,11 @@
 using System.Net.Http.Headers;
-using MaskinportenAuthentication.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MaskinportenAuthentication.Delegates;
 
 /// <summary>
-/// A <see cref="DelegatingHandler"/> (middleware) that provides authorization for all http requests
+/// A <see cref="DelegatingHandler"/> middleware that provides authorization for all http requests
 /// </summary>
 internal sealed class MaskinportenDelegatingHandler : DelegatingHandler
 {
@@ -18,9 +16,9 @@ internal sealed class MaskinportenDelegatingHandler : DelegatingHandler
     /// <summary>
     /// Creates a new instance of <see cref="MaskinportenDelegatingHandler"/>.
     /// </summary>
-    /// <param name="scopes">The scopes to claim with Maskinporten</param>
-    /// <param name="provider"></param>
-    /// <param name="logger"></param>
+    /// <param name="scopes">A list of scopes to claim authorization for with Maskinporten</param>
+    /// <param name="provider">A service provider where an <see cref="IMaskinportenClient"/> service has been registered</param>
+    /// <param name="logger">Optional logger interface</param>
     public MaskinportenDelegatingHandler(
         IEnumerable<string> scopes,
         IServiceProvider provider,

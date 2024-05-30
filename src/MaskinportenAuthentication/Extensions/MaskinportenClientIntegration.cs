@@ -10,15 +10,30 @@ namespace MaskinportenAuthentication.Extensions;
 
 public static class MaskinportenClientIntegration
 {
+    /// <summary>
+    /// Expected JSON property name in appsettings.json
+    /// </summary>
     private const string _appSettingsKeyName = "MaskinportenSettingsFilepath";
+
+    /// <summary>
+    /// Assumed filepath to maskinporten-settings.json if no alternative path is provided via <see cref="_appSettingsKeyName"/>
+    /// </summary>
     private const string _defaultSettingsFilepath = "/mnt/app-secrets/maskinporten-settings.json";
 
+    /// <summary>
+    /// Adds a <see cref="MaskinportenClient"/> service and configures the required dependencies.<br/><br/>
+    /// Requires an `appsettings.json` entry under <see cref="_appSettingsKeyName"/> with the location to a `maskinporten-settings.json` file.
+    /// In the absence of this JSON property, the system expects a file located as specified in <see cref="_defaultSettingsFilepath"/>.
+    /// <br/><br/>
+    /// The `maskinporten-settings.json` is watched by the system and will be reloaded when changes are detected.
+    /// This is extremely useful for long-running processes that may want to implement regular key rotation, etc.
+    /// </summary>
+    /// <exception cref="MaskinportenConfigurationException">Missing or invalid settings file.</exception>
     public static IHostApplicationBuilder AddMaskinportenClient(this IHostApplicationBuilder builder)
     {
+        // Has IMaskinportenClient already been registered?
         if (builder.Services.Any(x => x.ServiceType == typeof(IMaskinportenClient)))
         {
-            // IMaskinportenClient is already registered
-            // TODO: Can we log here?
             return builder;
         }
 
@@ -44,30 +59,49 @@ public static class MaskinportenClientIntegration
             .Services.AddOptions<MaskinportenSettings>()
             .BindConfiguration("MaskinportenSettings")
             .ValidateDataAnnotations();
-        builder.Services.AddMemoryCache();
+        builder.Services.AddMemoryCache(options =>
+        {
+            options.SizeLimit = 256;
+        });
         builder.Services.AddSingleton<IMaskinportenClient, MaskinportenClient>();
 
         return builder;
     }
 
+    /// <summary>
+    /// Adds a <see cref="MaskinportenClient"/> service and configures the required dependencies.<br/><br/>
+    /// Requires a configuration object which will be static for the lifetime of the service. If you require
+    /// settings to update periodically, please refer to <see cref="AddMaskinportenClient(Microsoft.Extensions.Hosting.IHostApplicationBuilder)"/>
+    /// </summary>
+    /// <param name="configureOptions">
+    /// Action delegate that provides <see cref="MaskinportenSettings"/> configuration for the
+    /// <see cref="MaskinportenClient"/> service
+    /// </param>
     public static IServiceCollection AddMaskinportenClient(
         this IServiceCollection services,
-        Action<MaskinportenSettings> configure
+        Action<MaskinportenSettings> configureOptions
     )
     {
+        // Has IMaskinportenClient already been registered?
         if (services.Any(x => x.ServiceType == typeof(IMaskinportenClient)))
         {
-            // TODO: Can we log here?
             return services;
         }
 
-        services.AddOptions<MaskinportenSettings>().Configure(configure).ValidateDataAnnotations();
+        services.AddOptions<MaskinportenSettings>().Configure(configureOptions).ValidateDataAnnotations();
         services.AddMemoryCache();
         services.AddSingleton<IMaskinportenClient, MaskinportenClient>();
 
         return services;
     }
 
+    /// <summary>
+    /// Sets up a <see cref="MaskinportenDelegatingHandler"/> middleware for the supplied <see cref="HttpClient"/>,
+    /// which will inject an Authorization header with a Bearer token for all requests.<br/><br/>
+    /// If your target API does <em>not</em> use this authentication scheme, you should consider implementing
+    /// <see cref="MaskinportenClient.GetAccessToken"/> directly and handling authorization details manually.
+    /// </summary>
+    /// <param name="scopes">A list of scopes to claim authorization for with Maskinporten</param>
     public static IHttpClientBuilder UseMaskinportenAuthorization(
         this IHttpClientBuilder builder,
         IEnumerable<string> scopes

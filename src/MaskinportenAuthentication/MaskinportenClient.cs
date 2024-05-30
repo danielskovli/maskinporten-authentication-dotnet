@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using MaskinportenAuthentication.Exceptions;
 using MaskinportenAuthentication.Models;
@@ -23,13 +24,11 @@ public sealed class MaskinportenClient : IMaskinportenClient
     private static readonly HttpClient _httpClient =
         new(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(15) });
 
-    // private static readonly ConcurrentDictionary<string, MaskinportenTokenResponse> _tokenCache = new();
-
     /// <summary>
     /// Instantiates a new <see cref="MaskinportenClient"/> object.
     /// </summary>
-    /// <param name="options"></param>
-    /// <param name="tokenCache"></param>
+    /// <param name="options">Maskinporten settings.</param>
+    /// <param name="tokenCache">A cache instance for authorization tokens.</param>
     /// <param name="logger">Optional logger interface.</param>
     public MaskinportenClient(
         IOptionsMonitor<MaskinportenSettings> options,
@@ -43,54 +42,90 @@ public sealed class MaskinportenClient : IMaskinportenClient
     }
 
     /// <inheritdoc/>
-    public async Task<MaskinportenTokenResponse> GetAccessToken(
+    public Task<MaskinportenTokenResponse> GetAccessToken(
         IEnumerable<string> scopes,
         CancellationToken cancellationToken = default
     )
     {
         var formattedScopes = FormattedScopes(scopes);
 
-        if (
-            _tokenCache.TryGetValue(formattedScopes, out MaskinportenTokenResponse? cachedToken)
-            && cachedToken is not null
-        )
+        var result = _tokenCache.GetOrCreate<object>(
+            formattedScopes,
+            entry =>
+            {
+                entry.SetSize(1);
+                return new Lazy<Task<MaskinportenTokenResponse>>(
+                    () =>
+                        Task.Run(
+                            async () =>
+                            {
+                                await Task.Yield();
+
+                                var token = await HandleMaskinportenAuthentication(formattedScopes, cancellationToken);
+
+                                return _tokenCache.Set(
+                                    formattedScopes,
+                                    token,
+                                    new MemoryCacheEntryOptions()
+                                        .SetSize(1)
+                                        .SetAbsoluteExpiration(token.ExpiresAt)
+                                        .AddExpirationToken(
+                                            new CancellationChangeToken(
+                                                new CancellationTokenSource(
+                                                    token.ExpiresAt.AddMilliseconds(100) - DateTime.UtcNow
+                                                ).Token
+                                            )
+                                        )
+                                );
+                            },
+                            cancellationToken
+                        ),
+                    LazyThreadSafetyMode.ExecutionAndPublication
+                );
+            }
+        );
+
+        Debug.Assert(result is MaskinportenTokenResponse or Lazy<Task<MaskinportenTokenResponse>>);
+        if (result is Lazy<Task<MaskinportenTokenResponse>> lazy)
         {
-            _logger?.LogDebug("Using cached access token which expires at: {ExpiresAt}", cachedToken.ExpiresAt);
-            return cachedToken;
+            _logger?.LogDebug("Waiting for token request to resolve with Maskinporten");
+            return lazy.Value;
         }
 
-        _logger?.LogDebug("Cached token is not available or has expired, re-authenticating");
+        _logger?.LogDebug(
+            "Using cached access token which expires at {ExpiresAt}",
+            ((MaskinportenTokenResponse)result).ExpiresAt
+        );
+        return Task.FromResult((MaskinportenTokenResponse)result);
+    }
+
+    /// <summary>
+    /// Handles the sending of grant requests to Maskinporten
+    /// </summary>
+    /// <param name="formattedScopes">A single space-separated string containing the scopes to authorize for.</param>
+    /// <param name="cancellationToken">An optional cancellation token.</param>
+    /// <returns><inheritdoc cref="GetAccessToken"/></returns>
+    /// <exception cref="MaskinportenAuthenticationException"><inheritdoc cref="GetAccessToken"/></exception>
+    private async Task<MaskinportenTokenResponse> HandleMaskinportenAuthentication(
+        string formattedScopes,
+        CancellationToken cancellationToken = default
+    )
+    {
         var jwt = GenerateJwtGrant(formattedScopes);
         var payload = GenerateAuthenticationPayload(jwt);
-        using var response = await _httpClient.PostAsync(TokenUri, payload, cancellationToken).ConfigureAwait(false);
 
-        var token = await ParseServerResponse(response);
-        _logger?.LogDebug("Token retrieved successfully");
-
-        return _tokenCache.Set(
-            formattedScopes,
-            token,
-            new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(token.ExpiresAt)
-                .AddExpirationToken(
-                    new CancellationChangeToken(
-                        new CancellationTokenSource(token.ExpiresAt.AddMilliseconds(100) - DateTime.UtcNow).Token
-                    )
-                )
-        // .RegisterPostEvictionCallback(
-        //     (key, value, reason, state) =>
-        //     {
-        //         _logger?.LogDebug(
-        //             "Eviction event from MemoryCache: Key={Key}, Value={Value}, Reason={Reason}, State={State}, TokenExpiryDiff={TokenExpiryDiff}",
-        //             key,
-        //             value,
-        //             reason,
-        //             state,
-        //             DateTime.UtcNow - ((MaskinportenTokenResponse?)value)?.ExpiresAt
-        //         );
-        //     }
-        // )
+        _logger?.LogDebug(
+            "Sending grant request to Maskinporten: {GrantRequest}",
+            await payload.ReadAsStringAsync(cancellationToken)
         );
+
+        using var response = await _httpClient.PostAsync(TokenUri, payload, cancellationToken).ConfigureAwait(false);
+        var token =
+            await ParseServerResponse(response)
+            ?? throw new MaskinportenAuthenticationException("Invalid response from Maskinporten");
+
+        _logger?.LogDebug("Token retrieved successfully");
+        return token;
     }
 
     /// <summary>
@@ -98,7 +133,7 @@ public sealed class MaskinportenClient : IMaskinportenClient
     /// </summary>
     /// <param name="formattedScopes">A space-separated list of scopes to make a claim for.</param>
     /// <returns><inheritdoc cref="JsonWebTokenHandler.CreateToken(SecurityTokenDescriptor)"/></returns>
-    /// <exception cref="MaskinportenConfigurationException">Missing or invalid Maskinporten configuration.</exception>
+    /// <exception cref="MaskinportenConfigurationException"></exception>
     private string GenerateJwtGrant(string formattedScopes)
     {
         MaskinportenSettings? settings;
@@ -132,7 +167,7 @@ public sealed class MaskinportenClient : IMaskinportenClient
     /// <summary>
     /// Generates an authentication payload from the supplied JWT (see <see cref="GenerateJwtGrant"/>).<br/><br/>
     /// This payload needs to be a <see cref="FormUrlEncodedContent"/> object with some precise parameters,
-    /// as per <a href="https://docs.digdir.no/docs/Maskinporten/maskinporten_guide_apikonsument#5-be-om-token">the docs</a>.
+    /// as per <a href="https://docs.digdir.no/docs/Maskinporten/maskinporten_guide_apikonsument#5-be-om-token">the docs.</a>.
     /// </summary>
     /// <param name="jwtAssertion">The JWT token generated by <see cref="GenerateJwtGrant"/>.</param>
     private static FormUrlEncodedContent GenerateAuthenticationPayload(string jwtAssertion)
@@ -186,7 +221,7 @@ public sealed class MaskinportenClient : IMaskinportenClient
     /// Formats a list of scopes according to the expected formatting (space-delimited).
     /// See <a href="https://docs.digdir.no/docs/Maskinporten/maskinporten_guide_apikonsument#5-be-om-token">the docs</a> for more information.
     /// </summary>
-    /// <param name="scopes">A list/collection of scopes</param>
-    /// <returns>A single string containing the supplied scopes</returns>
+    /// <param name="scopes">A collection of scopes.</param>
+    /// <returns>A single string containing the supplied scopes.</returns>
     private static string FormattedScopes(IEnumerable<string> scopes) => string.Join(" ", scopes);
 }

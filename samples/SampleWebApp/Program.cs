@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using MaskinportenAuthentication;
 using MaskinportenAuthentication.Extensions;
@@ -12,7 +13,7 @@ using SampleWebApp.HttpClients;
         https://api.test.samarbeid.digdir.no/clients
         https://testdata.api.skatteetaten.no/api/testnorge/v2/soek
 
-    For your own testing and/or implementation, substitute values as required.
+    For your own testing and/or implementation, substitute the values as required.
 
     NOTE: The key `MaskinportenSettingsFilepath` in appsettings.Development.json defines where the
           maskinporten-settings.json file should be loaded from.
@@ -72,9 +73,30 @@ app.MapGet(
     async (IMaskinportenClient maskinportenClient, IHttpClientFactory httpClientFactory) =>
     {
         using var httpclient = httpClientFactory.CreateClient();
-        var token = await maskinportenClient.GetAccessToken(["idporten:dcr.read"]);
-        httpclient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
 
+        // Demonstrates internal caching mechanism, implemented via MemoryCache and Lazy objects
+        var multipleIdenticalTokenRequests = await Task.WhenAll(
+            maskinportenClient.GetAccessToken(["idporten:dcr.read"]),
+            maskinportenClient.GetAccessToken(["idporten:dcr.read"]),
+            maskinportenClient.GetAccessToken(["idporten:dcr.read"]),
+            Task.Run(async () =>
+            {
+                await Task.Delay(3000);
+                return await maskinportenClient.GetAccessToken(["idporten:dcr.read"]);
+            })
+        );
+
+        // Grab a random token from the pool, and assert that all tokens are in fact the same instance in memory
+        var randomToken = multipleIdenticalTokenRequests[new Random().Next(multipleIdenticalTokenRequests.Length)];
+        Debug.Assert(multipleIdenticalTokenRequests.All(x => ReferenceEquals(x, randomToken)));
+
+        // Set up a default Bearer token authorization header that will apply to all subsequent requests
+        httpclient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            randomToken.AccessToken
+        );
+
+        // Fetch data from the protected endpoint
         using var result = await httpclient.GetAsync(
             "https://api.test.samarbeid.digdir.no/clients/ds_altinn_maskinporten"
         );
@@ -82,6 +104,16 @@ app.MapGet(
         var content = await result.Content.ReadAsStringAsync();
 
         return new { Data = content };
+    }
+);
+
+// Redirect root to Swagger docs
+app.MapGet(
+    "/",
+    context =>
+    {
+        context.Response.Redirect("/swagger/index.html");
+        return Task.CompletedTask;
     }
 );
 
