@@ -59,10 +59,6 @@ public static class MaskinportenClientIntegration
             .Services.AddOptions<MaskinportenSettings>()
             .BindConfiguration("MaskinportenSettings")
             .ValidateDataAnnotations();
-        builder.Services.AddMemoryCache(options =>
-        {
-            options.SizeLimit = 256;
-        });
         builder.Services.AddSingleton<IMaskinportenClient, MaskinportenClient>();
 
         return builder;
@@ -89,7 +85,6 @@ public static class MaskinportenClientIntegration
         }
 
         services.AddOptions<MaskinportenSettings>().Configure(configureOptions).ValidateDataAnnotations();
-        services.AddMemoryCache();
         services.AddSingleton<IMaskinportenClient, MaskinportenClient>();
 
         return services;

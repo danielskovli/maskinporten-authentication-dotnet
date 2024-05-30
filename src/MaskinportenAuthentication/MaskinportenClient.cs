@@ -17,7 +17,7 @@ public sealed class MaskinportenClient : IMaskinportenClient
 {
     private readonly ILogger<MaskinportenClient>? _logger;
     private readonly IOptionsMonitor<MaskinportenSettings> _options;
-    private readonly IMemoryCache _tokenCache;
+    private readonly MemoryCache _tokenCache;
 
     private string TokenUri => _options.CurrentValue.Authority.Trim('/') + "/token";
 
@@ -28,17 +28,15 @@ public sealed class MaskinportenClient : IMaskinportenClient
     /// Instantiates a new <see cref="MaskinportenClient"/> object.
     /// </summary>
     /// <param name="options">Maskinporten settings.</param>
-    /// <param name="tokenCache">A cache instance for authorization tokens.</param>
     /// <param name="logger">Optional logger interface.</param>
     public MaskinportenClient(
         IOptionsMonitor<MaskinportenSettings> options,
-        IMemoryCache tokenCache,
         ILogger<MaskinportenClient>? logger = default
     )
     {
         _options = options;
-        _tokenCache = tokenCache;
         _logger = logger;
+        _tokenCache = new MemoryCache(new MemoryCacheOptions { SizeLimit = 256 });
     }
 
     /// <inheritdoc/>
