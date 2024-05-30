@@ -11,25 +11,25 @@ public sealed record MaskinportenTokenResponse
     /// The JWT access token to be used in the Authorization header for downstream requests.
     /// </summary>
     [JsonPropertyName("access_token")]
-    public required string AccessToken { get; set; }
+    public required string AccessToken { get; init; }
 
     /// <summary>
     /// The type of JWT received. In this context, the value is always `Bearer`.
     /// </summary>
     [JsonPropertyName("token_type")]
-    public required string TokenType { get; set; }
+    public required string TokenType { get; init; }
 
     /// <summary>
     /// The number of seconds until token expiry. Typically set to 120 = 2 minutes.
     /// </summary>
     [JsonPropertyName("expires_in")]
-    public required int ExpiresIn { get; set; }
+    public required int ExpiresIn { get; init; }
 
     /// <summary>
     /// The scope(s) associated with the authorization token (<see cref="AccessToken"/>).
     /// </summary>
     [JsonPropertyName("scope")]
-    public required string Scope { get; set; }
+    public required string Scope { get; init; }
 
     /// <summary>
     /// Convenience conversion of <see cref="ExpiresIn"/> to an actual instant in time.
