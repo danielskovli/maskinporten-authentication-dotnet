@@ -29,8 +29,8 @@ public sealed class MaskinportenClient : IMaskinportenClient
     /// <summary>
     /// Instantiates a new <see cref="MaskinportenClient"/> object.
     /// </summary>
-    /// <param name="options"></param>
-    /// <param name="tokenCache"></param>
+    /// <param name="options">Maskinporten settings.</param>
+    /// <param name="tokenCache">A cache instance for authorization tokens.</param>
     /// <param name="logger">Optional logger interface.</param>
     public MaskinportenClient(
         IOptionsMonitor<MaskinportenSettings> options,
@@ -50,7 +50,8 @@ public sealed class MaskinportenClient : IMaskinportenClient
     )
     {
         var formattedScopes = FormattedScopes(scopes);
-        var cachedToken = _tokenCache.GetOrCreate(
+
+        var result = _tokenCache.GetOrCreate<object>(
             formattedScopes,
             entry =>
             {
@@ -61,53 +62,23 @@ public sealed class MaskinportenClient : IMaskinportenClient
                             async () =>
                             {
                                 await Task.Yield();
-                                _logger?.LogDebug("Cached token is not available or has expired, re-authenticating");
-                                var jwt = GenerateJwtGrant(formattedScopes);
-                                var payload = GenerateAuthenticationPayload(jwt);
-                                using var response = await _httpClient
-                                    .PostAsync(TokenUri, payload, cancellationToken)
-                                    .ConfigureAwait(false);
 
-                                var token = await ParseServerResponse(response);
-                                _logger?.LogDebug("Token retrieved successfully");
+                                var token = await HandleMaskinportenAuthentication(formattedScopes, cancellationToken);
 
-                                // TODO: This can be simplified/mostly skipped. Keeping for debug while WIP
-                                _tokenCache.Set(
+                                return _tokenCache.Set(
                                     formattedScopes,
                                     token,
-                                    new MemoryCacheEntryOptions
-                                    {
-                                        Size = 1,
-                                        AbsoluteExpiration = token.ExpiresAt,
-                                        ExpirationTokens =
-                                        {
+                                    new MemoryCacheEntryOptions()
+                                        .SetSize(1)
+                                        .SetAbsoluteExpiration(token.ExpiresAt)
+                                        .AddExpirationToken(
                                             new CancellationChangeToken(
                                                 new CancellationTokenSource(
                                                     token.ExpiresAt.AddMilliseconds(100) - DateTime.UtcNow
                                                 ).Token
                                             )
-                                        },
-                                        PostEvictionCallbacks =
-                                        {
-                                            new PostEvictionCallbackRegistration
-                                            {
-                                                EvictionCallback = (key, value, reason, state) =>
-                                                {
-                                                    _logger?.LogDebug(
-                                                        "Eviction event from MemoryCache: Key={Key}, Value={Value}, Reason={Reason}, State={State}, TokenExpiryDiff={TokenExpiryDiff}",
-                                                        key,
-                                                        value,
-                                                        reason,
-                                                        state,
-                                                        DateTime.UtcNow - ((MaskinportenTokenResponse?)value)?.ExpiresAt
-                                                    );
-                                                },
-                                                State = null
-                                            }
-                                        }
-                                    }
+                                        )
                                 );
-                                return token;
                             },
                             cancellationToken
                         ),
@@ -116,50 +87,47 @@ public sealed class MaskinportenClient : IMaskinportenClient
             }
         );
 
-        return cachedToken is not null ? cachedToken.Value : throw new MaskinportenAuthenticationException();
+        Debug.Assert(result is MaskinportenTokenResponse or Lazy<Task<MaskinportenTokenResponse>>);
+        if (result is Lazy<Task<MaskinportenTokenResponse>> lazy)
+        {
+            _logger?.LogDebug("Waiting for token request to resolve with Maskinporten");
+            return lazy.Value;
+        }
 
-        // OLD IMPLEMENTATION BELOW:
-        // if (
-        //     _tokenCache.TryGetValue(formattedScopes, out MaskinportenTokenResponse? cachedToken)
-        //     && cachedToken is not null
-        // )
-        // {
-        //     _logger?.LogDebug("Using cached access token which expires at: {ExpiresAt}", cachedToken.ExpiresAt);
-        //     return cachedToken;
-        // }
-        //
-        // _logger?.LogDebug("Cached token is not available or has expired, re-authenticating");
-        // var jwt = GenerateJwtGrant(formattedScopes);
-        // var payload = GenerateAuthenticationPayload(jwt);
-        // using var response = await _httpClient.PostAsync(TokenUri, payload, cancellationToken).ConfigureAwait(false);
-        //
-        // var token = await ParseServerResponse(response);
-        // _logger?.LogDebug("Token retrieved successfully");
-        //
-        // return _tokenCache.Set(
-        //     formattedScopes,
-        //     token,
-        //     new MemoryCacheEntryOptions()
-        //         .SetAbsoluteExpiration(token.ExpiresAt)
-        //         .AddExpirationToken(
-        //             new CancellationChangeToken(
-        //                 new CancellationTokenSource(token.ExpiresAt.AddMilliseconds(100) - DateTime.UtcNow).Token
-        //             )
-        //         )
-        //         .RegisterPostEvictionCallback(
-        //             (key, value, reason, state) =>
-        //             {
-        //                 _logger?.LogDebug(
-        //                     "Eviction event from MemoryCache: Key={Key}, Value={Value}, Reason={Reason}, State={State}, TokenExpiryDiff={TokenExpiryDiff}",
-        //                     key,
-        //                     value,
-        //                     reason,
-        //                     state,
-        //                     DateTime.UtcNow - ((MaskinportenTokenResponse?)value)?.ExpiresAt
-        //                 );
-        //             }
-        //         )
-        // );
+        _logger?.LogDebug(
+            "Using cached access token which expires at {ExpiresAt}",
+            ((MaskinportenTokenResponse)result).ExpiresAt
+        );
+        return Task.FromResult((MaskinportenTokenResponse)result);
+    }
+
+    /// <summary>
+    /// Handles the sending of grants requests to Maskinporten
+    /// </summary>
+    /// <param name="formattedScopes">A single space-separated string containing the scopes to authorize for</param>
+    /// <param name="cancellationToken">An optional cancellation token</param>
+    /// <returns></returns>
+    /// <exception cref="MaskinportenAuthenticationException"></exception>
+    private async Task<MaskinportenTokenResponse> HandleMaskinportenAuthentication(
+        string formattedScopes,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var jwt = GenerateJwtGrant(formattedScopes);
+        var payload = GenerateAuthenticationPayload(jwt);
+
+        _logger?.LogDebug(
+            "Sending grant request to Maskinporten: {GrantRequest}",
+            await payload.ReadAsStringAsync(cancellationToken)
+        );
+
+        using var response = await _httpClient.PostAsync(TokenUri, payload, cancellationToken).ConfigureAwait(false);
+        var token =
+            await ParseServerResponse(response)
+            ?? throw new MaskinportenAuthenticationException("Invalid response from Maskinporten");
+
+        _logger?.LogDebug("Token retrieved successfully");
+        return token;
     }
 
     /// <summary>

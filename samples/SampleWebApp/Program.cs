@@ -74,13 +74,14 @@ app.MapGet(
     {
         using var httpclient = httpClientFactory.CreateClient();
 
+        // Demonstrates internal caching mechanism, implemented via MemoryCache and Lazy
         var multipleIdenticalTokenRequests = await Task.WhenAll(
             maskinportenClient.GetAccessToken(["idporten:dcr.read"]),
             maskinportenClient.GetAccessToken(["idporten:dcr.read"]),
             maskinportenClient.GetAccessToken(["idporten:dcr.read"]),
             Task.Run(async () =>
             {
-                await Task.Delay(5000);
+                await Task.Delay(3000);
                 return await maskinportenClient.GetAccessToken(["idporten:dcr.read"]);
             })
         );

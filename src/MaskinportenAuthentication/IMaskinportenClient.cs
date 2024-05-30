@@ -8,7 +8,7 @@ namespace MaskinportenAuthentication;
 public interface IMaskinportenClient
 {
     /// <summary>
-    /// Sends an authorization request to Maskinporten and retrieves a JWT Bearer token for successful request.<br/><br/>
+    /// Sends an authorization request to Maskinporten and retrieves a JWT Bearer token for successful requests.<br/><br/>
     /// Will cache tokens per scope, for the lifetime duration as defined in the token Maskinporten token payload,
     /// which means this method is safe to call in a loop or concurrent environment without encountering rate concerns.
     /// </summary>

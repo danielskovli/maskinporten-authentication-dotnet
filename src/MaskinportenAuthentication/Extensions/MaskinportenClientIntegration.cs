@@ -18,7 +18,6 @@ public static class MaskinportenClientIntegration
         if (builder.Services.Any(x => x.ServiceType == typeof(IMaskinportenClient)))
         {
             // IMaskinportenClient is already registered
-            // TODO: Can we log here?
             return builder;
         }
 
@@ -60,7 +59,6 @@ public static class MaskinportenClientIntegration
     {
         if (services.Any(x => x.ServiceType == typeof(IMaskinportenClient)))
         {
-            // TODO: Can we log here?
             return services;
         }
 
