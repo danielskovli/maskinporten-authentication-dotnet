@@ -37,14 +37,17 @@ public sealed record MaskinportenTokenResponse
     public DateTime ExpiresAt => _createdAt.AddSeconds(ExpiresIn);
 
     /// <summary>
-    /// Is the token expired?
-    /// </summary>
-    public bool IsExpired => ExpiresAt < DateTime.UtcNow;
-
-    /// <summary>
     /// Internal tracker used by <see cref="ExpiresAt"/> to calculate an expiry <see cref="DateTime"/>.
     /// </summary>
     private readonly DateTime _createdAt = DateTime.UtcNow;
+
+    /// <summary>
+    /// Is the token expired?
+    /// </summary>
+    public bool IsExpired()
+    {
+        return ExpiresAt < DateTime.UtcNow;
+    }
 
     public override string ToString()
     {
