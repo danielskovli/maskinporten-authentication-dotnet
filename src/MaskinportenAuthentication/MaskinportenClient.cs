@@ -16,9 +16,10 @@ namespace MaskinportenAuthentication;
 public sealed class MaskinportenClient : IMaskinportenClient
 {
     /// <summary>
-    /// The margin to take into consideration when determining if a token has expired or not (seconds).
+    /// The margin to take into consideration when determining if a token has expired (seconds).
+    /// <remarks>This value represents the worst-case latency scenario for <em>outbound</em> connections carrying the access token.</remarks>
     /// </summary>
-    private const int _tokenExpirationMargin = 60;
+    private const double _tokenExpirationMargin = 30;
 
     private readonly ILogger<MaskinportenClient>? _logger;
     private readonly IOptionsMonitor<MaskinportenSettings> _options;
@@ -91,12 +92,13 @@ public sealed class MaskinportenClient : IMaskinportenClient
         return Task.Run(
             async () =>
             {
+                var localTime = DateTime.UtcNow;
                 MaskinportenTokenResponse token = await HandleMaskinportenAuthentication(
                     formattedScopes,
                     cancellationToken
                 );
 
-                DateTime cacheExpiry = token.ExpiresAt.AddSeconds(_tokenExpirationMargin * -1);
+                var cacheExpiry = localTime.AddSeconds(token.ExpiresIn - _tokenExpirationMargin);
                 if (cacheExpiry <= DateTime.UtcNow)
                 {
                     _tokenCache.Remove(formattedScopes);
