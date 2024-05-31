@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using MaskinportenAuthentication.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -27,7 +28,11 @@ internal sealed class MaskinportenDelegatingHandler : DelegatingHandler
     {
         _logger = logger ?? provider.GetService<ILoggerFactory>()?.CreateLogger<MaskinportenDelegatingHandler>();
         _scopes = scopes;
-        _maskinportenClient = provider.GetRequiredService<IMaskinportenClient>();
+        _maskinportenClient =
+            provider.GetService<IMaskinportenClient>()
+            ?? throw new MaskinportenConfigurationException(
+                $"No {nameof(IMaskinportenClient)} service has been registered"
+            );
     }
 
     /// <inheritdoc/>

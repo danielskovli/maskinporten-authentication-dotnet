@@ -12,7 +12,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\src\MaskinportenAuthentication\MaskinportenAuthentication.csproj" />
+        <ProjectReference Include="..\..\src\MaskinportenAuthentication\MaskinportenAuthentication.csproj"/>
     </ItemGroup>
 
 </Project>
