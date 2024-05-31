@@ -15,11 +15,14 @@ namespace MaskinportenAuthentication;
 /// <inheritdoc/>
 public sealed class MaskinportenClient : IMaskinportenClient
 {
+    /// <summary>
+    /// The margin to take into consideration when determining if a token has expired or not (seconds).
+    /// </summary>
+    private const int _tokenExpirationMargin = 60;
+
     private readonly ILogger<MaskinportenClient>? _logger;
     private readonly IOptionsMonitor<MaskinportenSettings> _options;
     private readonly MemoryCache _tokenCache;
-
-    private string TokenUri => _options.CurrentValue.Authority.Trim('/') + "/token";
 
     private static readonly HttpClient _httpClient =
         new(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(15) });
@@ -45,7 +48,7 @@ public sealed class MaskinportenClient : IMaskinportenClient
         CancellationToken cancellationToken = default
     )
     {
-        var formattedScopes = FormattedScopes(scopes);
+        string formattedScopes = FormattedScopes(scopes);
 
         var result = _tokenCache.GetOrCreate<object>(
             formattedScopes,
@@ -53,31 +56,7 @@ public sealed class MaskinportenClient : IMaskinportenClient
             {
                 entry.SetSize(1);
                 return new Lazy<Task<MaskinportenTokenResponse>>(
-                    () =>
-                        Task.Run(
-                            async () =>
-                            {
-                                await Task.Yield();
-
-                                var token = await HandleMaskinportenAuthentication(formattedScopes, cancellationToken);
-
-                                return _tokenCache.Set(
-                                    formattedScopes,
-                                    token,
-                                    new MemoryCacheEntryOptions()
-                                        .SetSize(1)
-                                        .SetAbsoluteExpiration(token.ExpiresAt)
-                                        .AddExpirationToken(
-                                            new CancellationChangeToken(
-                                                new CancellationTokenSource(
-                                                    token.ExpiresAt.AddMilliseconds(100) - DateTime.UtcNow
-                                                ).Token
-                                            )
-                                        )
-                                );
-                            },
-                            cancellationToken
-                        ),
+                    () => CacheEntryFactory(formattedScopes, cancellationToken),
                     LazyThreadSafetyMode.ExecutionAndPublication
                 );
             }
@@ -98,6 +77,45 @@ public sealed class MaskinportenClient : IMaskinportenClient
     }
 
     /// <summary>
+    /// Factory method that returns a task which will send request a token from Maskinporten, then insert this token
+    /// in the <see cref="_tokenCache"/> before returning it to the caller.
+    /// </summary>
+    /// <param name="formattedScopes">A single space-separated string containing the scopes to authorize for.</param>
+    /// <param name="cancellationToken">An optional cancellation token.</param>
+    /// <exception cref="MaskinportenTokenExpiredException">The token received from Maskinporten has already expired.</exception>
+    private Task<MaskinportenTokenResponse> CacheEntryFactory(
+        string formattedScopes,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return Task.Run(
+            async () =>
+            {
+                MaskinportenTokenResponse token = await HandleMaskinportenAuthentication(
+                    formattedScopes,
+                    cancellationToken
+                );
+
+                DateTime cacheExpiry = token.ExpiresAt.AddSeconds(_tokenExpirationMargin * -1);
+                if (cacheExpiry <= DateTime.UtcNow)
+                {
+                    _tokenCache.Remove(formattedScopes);
+                    throw new MaskinportenTokenExpiredException(
+                        $"Access token cannot be used because it has a calculated expiration in the past (taking into account a margin of {_tokenExpirationMargin} seconds): {token}"
+                    );
+                }
+
+                return _tokenCache.Set(
+                    formattedScopes,
+                    token,
+                    new MemoryCacheEntryOptions().SetSize(1).SetAbsoluteExpiration(cacheExpiry)
+                );
+            },
+            cancellationToken
+        );
+    }
+
+    /// <summary>
     /// Handles the sending of grant requests to Maskinporten
     /// </summary>
     /// <param name="formattedScopes">A single space-separated string containing the scopes to authorize for.</param>
@@ -109,21 +127,37 @@ public sealed class MaskinportenClient : IMaskinportenClient
         CancellationToken cancellationToken = default
     )
     {
-        var jwt = GenerateJwtGrant(formattedScopes);
-        var payload = GenerateAuthenticationPayload(jwt);
+        try
+        {
+            string jwt = GenerateJwtGrant(formattedScopes);
+            FormUrlEncodedContent payload = GenerateAuthenticationPayload(jwt);
 
-        _logger?.LogDebug(
-            "Sending grant request to Maskinporten: {GrantRequest}",
-            await payload.ReadAsStringAsync(cancellationToken)
-        );
+            _logger?.LogDebug(
+                "Sending grant request to Maskinporten: {GrantRequest}",
+                await payload.ReadAsStringAsync(cancellationToken)
+            );
 
-        using var response = await _httpClient.PostAsync(TokenUri, payload, cancellationToken).ConfigureAwait(false);
-        var token =
-            await ParseServerResponse(response)
-            ?? throw new MaskinportenAuthenticationException("Invalid response from Maskinporten");
+            string tokenAuthority = _options.CurrentValue.Authority.Trim('/');
+            using HttpResponseMessage response = await _httpClient.PostAsync(
+                $"{tokenAuthority}/token",
+                payload,
+                cancellationToken
+            );
+            MaskinportenTokenResponse token =
+                await ParseServerResponse(response, cancellationToken)
+                ?? throw new MaskinportenAuthenticationException("Invalid response from Maskinporten");
 
-        _logger?.LogDebug("Token retrieved successfully");
-        return token;
+            _logger?.LogDebug("Token retrieved successfully");
+            return token;
+        }
+        catch (MaskinportenException)
+        {
+            throw;
+        }
+        catch (Exception e)
+        {
+            throw new MaskinportenAuthenticationException($"Authentication with Maskinporten failed: {e.Message}", e);
+        }
     }
 
     /// <summary>
@@ -163,9 +197,13 @@ public sealed class MaskinportenClient : IMaskinportenClient
     }
 
     /// <summary>
-    /// Generates an authentication payload from the supplied JWT (see <see cref="GenerateJwtGrant"/>).<br/><br/>
+    /// <para>
+    /// Generates an authentication payload from the supplied JWT (see <see cref="GenerateJwtGrant"/>).
+    /// </para>
+    /// <para>
     /// This payload needs to be a <see cref="FormUrlEncodedContent"/> object with some precise parameters,
     /// as per <a href="https://docs.digdir.no/docs/Maskinporten/maskinporten_guide_apikonsument#5-be-om-token">the docs.</a>.
+    /// </para>
     /// </summary>
     /// <param name="jwtAssertion">The JWT token generated by <see cref="GenerateJwtGrant"/>.</param>
     private static FormUrlEncodedContent GenerateAuthenticationPayload(string jwtAssertion)
@@ -183,12 +221,16 @@ public sealed class MaskinportenClient : IMaskinportenClient
     /// Parses the Maskinporten server response and deserializes the JSON body.
     /// </summary>
     /// <param name="httpResponse">The server response.</param>
+    /// <param name="cancellationToken">An optional cancellation token.</param>
     /// <returns>A <see cref="MaskinportenTokenResponse"/> for successful requests.</returns>
     /// <exception cref="MaskinportenAuthenticationException">Authentication failed.
     /// This could be caused by an authentication/authorization issue or a myriad of tother circumstances.</exception>
-    private static async Task<MaskinportenTokenResponse> ParseServerResponse(HttpResponseMessage httpResponse)
+    private static async Task<MaskinportenTokenResponse> ParseServerResponse(
+        HttpResponseMessage httpResponse,
+        CancellationToken cancellationToken = default
+    )
     {
-        var content = await httpResponse.Content.ReadAsStringAsync();
+        string content = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
 
         try
         {
@@ -201,6 +243,10 @@ public sealed class MaskinportenClient : IMaskinportenClient
 
             return JsonSerializer.Deserialize<MaskinportenTokenResponse>(content)
                 ?? throw new JsonException("JSON body is null");
+        }
+        catch (MaskinportenException)
+        {
+            throw;
         }
         catch (JsonException e)
         {

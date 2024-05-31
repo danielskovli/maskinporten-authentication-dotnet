@@ -33,13 +33,11 @@ public sealed record MaskinportenTokenResponse
 
     /// <summary>
     /// Convenience conversion of <see cref="ExpiresIn"/> to an actual instant in time.
-    /// Takes the <see cref="_tokenExpirationMargin"/> into account.
     /// </summary>
-    public DateTime ExpiresAt => _createdAt.AddSeconds(ExpiresIn - _tokenExpirationMargin);
+    public DateTime ExpiresAt => _createdAt.AddSeconds(ExpiresIn);
 
     /// <summary>
     /// Is the token expired?
-    /// Takes the <see cref="_tokenExpirationMargin"/> into account.
     /// </summary>
     public bool IsExpired => ExpiresAt < DateTime.UtcNow;
 
@@ -47,11 +45,6 @@ public sealed record MaskinportenTokenResponse
     /// Internal tracker used by <see cref="ExpiresAt"/> to calculate an expiry <see cref="DateTime"/>.
     /// </summary>
     private readonly DateTime _createdAt = DateTime.UtcNow;
-
-    /// <summary>
-    /// The margin to take into consideration when determining if a token has expired or not (seconds).
-    /// </summary>
-    private const int _tokenExpirationMargin = 60;
 
     public override string ToString()
     {

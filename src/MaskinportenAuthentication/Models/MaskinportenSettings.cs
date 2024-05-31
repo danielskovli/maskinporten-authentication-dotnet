@@ -5,8 +5,12 @@ using Microsoft.IdentityModel.Tokens;
 namespace MaskinportenAuthentication.Models;
 
 /// <summary>
-/// A configuration object that represents all required Maskinporten authentication settings.<br/><br/>
+/// <para>
+/// A configuration object that represents all required Maskinporten authentication settings.
+/// </para>
+/// <para>
 /// Typically serialized as `maskinporten-settings.json` and injected in the runtime.
+/// </para>
 /// </summary>
 public sealed record MaskinportenSettings
 {

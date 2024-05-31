@@ -3,7 +3,7 @@ namespace MaskinportenAuthentication.Exceptions;
 /// <summary>
 /// An exception that indicates a problem with the authentication/authorization call to Maskinporten
 /// </summary>
-public class MaskinportenAuthenticationException : Exception
+public class MaskinportenAuthenticationException : MaskinportenException
 {
     public MaskinportenAuthenticationException() { }
 

@@ -3,7 +3,7 @@ namespace MaskinportenAuthentication.Exceptions;
 /// <summary>
 /// An exception that indicates a missing or invalid `maskinporten-settings.json` file
 /// </summary>
-public class MaskinportenConfigurationException : Exception
+public class MaskinportenConfigurationException : MaskinportenException
 {
     public MaskinportenConfigurationException() { }
 

@@ -40,6 +40,6 @@ internal sealed class MaskinportenDelegatingHandler : DelegatingHandler
         var auth = await _maskinportenClient.GetAccessToken(_scopes, cancellationToken);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
 
-        return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        return await base.SendAsync(request, cancellationToken);
     }
 }
