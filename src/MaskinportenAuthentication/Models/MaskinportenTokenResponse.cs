@@ -1,12 +1,15 @@
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace MaskinportenAuthentication.Models;
 
 /// <summary>
 /// A Maskinporten response received after a successful grant request.
 /// </summary>
-public sealed record MaskinportenTokenResponse
+public sealed partial record MaskinportenTokenResponse
 {
+    private static Regex _jwtStructurePattern = MyRegex();
+
     /// <summary>
     /// The JWT access token to be used in the Authorization header for downstream requests.
     /// </summary>
@@ -51,6 +54,13 @@ public sealed record MaskinportenTokenResponse
 
     public override string ToString()
     {
-        return $"{nameof(AccessToken)}: {AccessToken}, {nameof(TokenType)}: {TokenType}, {nameof(Scope)}: {Scope}, {nameof(ExpiresIn)}: {ExpiresIn}, {nameof(ExpiresAt)}: {ExpiresAt}, {nameof(IsExpired)}: {IsExpired}";
+        var accessTokenMatch = _jwtStructurePattern.Match(AccessToken);
+        var maskedToken = accessTokenMatch.Success
+            ? $"{accessTokenMatch.Groups[1]}.{accessTokenMatch.Groups[2]}.xxx"
+            : "<masked>";
+        return $"{nameof(AccessToken)}: {maskedToken}, {nameof(TokenType)}: {TokenType}, {nameof(Scope)}: {Scope}, {nameof(ExpiresIn)}: {ExpiresIn}, {nameof(ExpiresAt)}: {ExpiresAt}";
     }
+
+    [GeneratedRegex(@"^(.+)\.(.+)\.(.+)$", RegexOptions.Multiline)]
+    private static partial Regex MyRegex();
 }
