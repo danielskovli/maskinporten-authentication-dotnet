@@ -52,6 +52,9 @@ public sealed partial record MaskinportenTokenResponse
         return ExpiresAt < DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// Stringifies the content of this instance, while masking the JWT signature part of <see cref="AccessToken"/>
+    /// </summary>
     public override string ToString()
     {
         var accessTokenMatch = _jwtStructurePattern.Match(AccessToken);
