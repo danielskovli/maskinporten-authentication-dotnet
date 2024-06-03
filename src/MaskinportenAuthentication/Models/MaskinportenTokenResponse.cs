@@ -8,7 +8,7 @@ namespace MaskinportenAuthentication.Models;
 /// </summary>
 public sealed partial record MaskinportenTokenResponse
 {
-    private static Regex _jwtStructurePattern = MyRegex();
+    private static readonly Regex _jwtStructurePattern = JwtRegexFactory();
 
     /// <summary>
     /// The JWT access token to be used in the Authorization header for downstream requests.
@@ -62,5 +62,5 @@ public sealed partial record MaskinportenTokenResponse
     }
 
     [GeneratedRegex(@"^(.+)\.(.+)\.(.+)$", RegexOptions.Multiline)]
-    private static partial Regex MyRegex();
+    private static partial Regex JwtRegexFactory();
 }
