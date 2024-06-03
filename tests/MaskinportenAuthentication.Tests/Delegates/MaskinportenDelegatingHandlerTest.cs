@@ -1,6 +1,5 @@
 using System.Net;
 using FluentAssertions;
-using JetBrains.Annotations;
 using MaskinportenAuthentication.Delegates;
 using MaskinportenAuthentication.Models;
 using Microsoft.Extensions.Logging;
@@ -9,7 +8,6 @@ using Moq.Protected;
 
 namespace MaskinportenAuthentication.Tests.Delegates;
 
-[TestSubject(typeof(MaskinportenDelegatingHandler))]
 public class MaskinportenDelegatingHandlerTest
 {
     [Fact]

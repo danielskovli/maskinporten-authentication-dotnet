@@ -1,27 +1,13 @@
-using System;
-using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
-using System.Net;
-using System.Runtime.Serialization;
-using System.Security.Cryptography;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using FluentAssertions;
-using JetBrains.Annotations;
 using MaskinportenAuthentication.Exceptions;
 using MaskinportenAuthentication.Models;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 using Moq;
-using Moq.Protected;
-using Xunit;
 
 namespace MaskinportenAuthentication.Tests;
 
-[TestSubject(typeof(MaskinportenClient))]
 public class MaskinportenClientTests
 {
     private readonly Mock<IOptionsMonitor<MaskinportenSettings>> _mockOptions;

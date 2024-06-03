@@ -1,5 +1,4 @@
 using FluentAssertions;
-using JetBrains.Annotations;
 using MaskinportenAuthentication.Delegates;
 using MaskinportenAuthentication.Exceptions;
 using MaskinportenAuthentication.Extensions;
@@ -12,7 +11,6 @@ using Moq;
 
 namespace MaskinportenAuthentication.Tests.Extensions;
 
-[TestSubject(typeof(MaskinportenClientIntegration))]
 public class MaskinportenClientIntegrationTests : IClassFixture<MaskinportenClientIntegrationFixture>
 {
     private readonly MaskinportenClientIntegrationFixture _fixture;

@@ -1,11 +1,9 @@
 using System.Text.Json;
 using FluentAssertions;
-using JetBrains.Annotations;
 using MaskinportenAuthentication.Models;
 
 namespace MaskinportenAuthentication.Tests.Models;
 
-[TestSubject(typeof(MaskinportenSettings))]
 public class MaskinportenSettingsTest
 {
     [Fact]
