@@ -31,7 +31,7 @@ public class MaskinportenClientTests
     private readonly MaskinportenSettings _maskinportenSettings =
         new()
         {
-            Authority = "https://test-authority.com",
+            Authority = "https://maskinporten.dev/",
             ClientId = "test-client-id",
             Key = TestHelpers.JsonWebKeyFactory()
         };
@@ -103,7 +103,7 @@ public class MaskinportenClientTests
         };
         var mockHandler = TestHelpers.MockHttpMessageHandlerFactory(tokenResponse);
         var httpClient = new HttpClient(mockHandler.Object);
-        _mockHttpClientFactory.Setup(_ => _.CreateClient(It.IsAny<string>())).Returns(httpClient);
+        _mockHttpClientFactory.Setup(x => x.CreateClient(It.IsAny<string>())).Returns(httpClient);
 
         // Act
         var result = await _maskinportenClient.GetAccessToken(scopes);
@@ -128,7 +128,7 @@ public class MaskinportenClientTests
         var mockHandler = TestHelpers.MockHttpMessageHandlerFactory(tokenResponse);
 
         var httpClient = new HttpClient(mockHandler.Object);
-        _mockHttpClientFactory.Setup(_ => _.CreateClient(It.IsAny<string>())).Returns(httpClient);
+        _mockHttpClientFactory.Setup(x => x.CreateClient(It.IsAny<string>())).Returns(httpClient);
 
         // Act
         Func<Task> act = async () =>
@@ -154,7 +154,7 @@ public class MaskinportenClientTests
         };
         var mockHandler = TestHelpers.MockHttpMessageHandlerFactory(tokenResponse);
         var httpClient = new HttpClient(mockHandler.Object);
-        _mockHttpClientFactory.Setup(_ => _.CreateClient(It.IsAny<string>())).Returns(httpClient);
+        _mockHttpClientFactory.Setup(x => x.CreateClient(It.IsAny<string>())).Returns(httpClient);
 
         // Act
         var token1 = await _maskinportenClient.GetAccessToken(scopes);
@@ -178,7 +178,7 @@ public class MaskinportenClientTests
         };
         var mockHandler = TestHelpers.MockHttpMessageHandlerFactory(tokenResponse);
         var httpClient = new HttpClient(mockHandler.Object);
-        _mockHttpClientFactory.Setup(_ => _.CreateClient(It.IsAny<string>())).Returns(httpClient);
+        _mockHttpClientFactory.Setup(x => x.CreateClient(It.IsAny<string>())).Returns(httpClient);
 
         // Act
         var token1 = await _maskinportenClient.GetAccessToken(scopes);
